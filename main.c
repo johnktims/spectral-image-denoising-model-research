@@ -3,58 +3,117 @@
  * make gif: convert -delay 10 -loop 0 Iteration_*pgm out.gif
  */
 
+#ifdef _CH_
+#pragma package <opencv>
+#endif
+
+#define CV_NO_BACKWARD_COMPATIBILITY
+
+#ifndef _EiC
+#include "cv.h"
+#include "highgui.h"
+#endif
+
 #include <stdio.h>  // printf
-#include "pgm.h"
 #include "models.h"
 
-int main(char argc, char *argv[])
+int main(int argc, char *argv[])
 {
-    int cols, rows, x, y, i, I = 100;
+    int x, y, i, I = 5;
+
+    CvCapture* capture = NULL;
+
 
     // Load noisy pgm `f` with Neumann B.C.s
-    int** f;
+    IplImage *f = NULL,
+             *t = NULL,
     
     // Let `u` be the original pgm
-    int** u;
+             *u = NULL;
+
     
     // load the passed in pgm or try to open
     // the lena pgm in this directory
+    /*
     if(argc > 1)
     {
-        f = load_pgm(argv[1], &cols, &rows);
-    }
-    else
-    {
-        f = load_pgm("lena_f.pgm", &cols, &rows);
-        u = (int**)copy_pgm(f, cols, rows);
-    }
+        capture = cvCaptureFromAVI(argv[1]);
 
-    if(!f)
+        if(!capture)
+        {
+            puts("NOT CAPTURING");
+            t = cvLoadImage(argv[1], -1);
+            f = cvCreateImage(cvSize(t->width, t->height),IPL_DEPTH_8U, 1);
+            cvConvertImage(t, f, 0);
+        }else
+        {
+            puts("CAPTURING");
+        }
+    }
+    */
+
+    /*
+    if(!f || !capture)
     {
-        puts("Invalid PGM file.");
-        puts("Syntax: ./program file.pgm");
+        puts("Invalid image file.");
+        puts("Syntax: ./program file.(jpg|png|pgm|etc)");
         return 0;
     }
-    printf("Image dimensions: %d by %d\n", cols, rows);
+    */
+    capture = cvCaptureFromAVI(argv[1]);
 
-    // Let `ui` be our current interation
-    int** ui = (int**)copy_pgm(u, cols, rows);
+    //printf("Image dimensions: %d by %d with %d Channels\n", f->width, f->height, f->nChannels);
 
-    // The filename of the current iteration
-    char buffer[19];
+    cvNamedWindow("Modified", CV_WINDOW_AUTOSIZE); 
+    cvMoveWindow("Modified", 100, 100);
 
-    // Apply PDE to pgm `I` times
-    for(i = 0; i < I; ++i)
+    cvNamedWindow("Original", CV_WINDOW_AUTOSIZE); 
+    cvMoveWindow("Original", 200, 200);
+
+    t = cvQueryFrame(capture);
+
+    int isColor = 0;
+    int frameH    = (int) cvGetCaptureProperty(capture, CV_CAP_PROP_FRAME_HEIGHT);
+    int frameW    = (int) cvGetCaptureProperty(capture, CV_CAP_PROP_FRAME_WIDTH);
+    int fps       = (int) cvGetCaptureProperty(capture, CV_CAP_PROP_FPS);
+    int numFrames = (int) cvGetCaptureProperty(capture,  CV_CAP_PROP_FRAME_COUNT);
+    int index = 0;
+
+    CvVideoWriter *writer = cvCreateVideoWriter("out.avi", CV_FOURCC('P','I','M','1'), fps,cvSize(frameW,frameH),isColor);
+
+    if(t)
     {
-        sprintf(buffer, "Iteration_%04d.pgm", i);
-        ui = non_convex(f, u, cols, rows);
-        save_pgm(ui, cols, rows, buffer);
-        replace_pgm(u, ui, cols, rows);
+        printf("Video: %dx%d @ %d; %d frames\n", frameH, frameW, fps, numFrames);
+        f = cvCreateImage(cvSize(t->width, t->height),IPL_DEPTH_8U, 1);
+    }
+    while(1)
+    {
+        if(!t)
+        {
+            break;
+        }
+
+        if(index % 10 == 0)
+        {
+            cvConvertImage(t, f, 0);
+            u = cvCloneImage(f);
+
+            cvShowImage("Original", f);
+
+            non_convex(f, u, I);
+            cvShowImage("Modified", u);
+            cvWaitKey(20);
+            cvWriteFrame(writer, u);
+        }
+
+        t = cvQueryFrame(capture);
+        ++index;
     }
 
-    free_pgm(f, cols, rows);
-    free_pgm(u, cols, rows);
-    free_pgm(ui, cols, rows);
+    cvReleaseVideoWriter(&writer);
+    cvReleaseCapture(&capture);
+    cvReleaseImage(&f);
+    cvReleaseImage(&u);
     return 0;
 }
 
