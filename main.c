@@ -14,7 +14,7 @@
 
 int main(int argc, char *argv[])
 {
-    int x, y, i, I = 5;
+    int I = 5;
 
     CvCapture* capture = NULL;
 

@@ -21,25 +21,14 @@ void non_convex(IplImage* f_t, IplImage* un_t, int N)
     BwImage f(f_t);
     BwImage un(un_t);
     
-    int i,
-        j,
-        x,
+    int x,
         y,
-        k,
-        c = f_t->nChannels,
-        step = f_t->widthStep/sizeof(uchar);
+        k;
 
     double ux,
            uy,
-           star;
-
-    /*
-     * a[0] = a_{i+0.5}
-     * a[1] = a_{i-0.5}
-     * a[2] = a_{j+0.5}
-     * a[3] = a_{j-0.5}
-     */
-    double a[4],
+           star,
+           a[4],
            d[4],
 
            epsilon = 0.05,
@@ -50,7 +39,6 @@ void non_convex(IplImage* f_t, IplImage* un_t, int N)
            exponent = ((2-p)/2.0);
 
     epsilon = pow(epsilon, 2);
-    uchar* data = (uchar*)un_t->imageData;
 
     // TODO: Handle Neumann Boundary Conditions
     for(k = 0; k < N; ++k)
