@@ -1,8 +1,3 @@
-/**
- * compile : gcc main.c -O3 -lm
- * make gif: convert -delay 10 -loop 0 Iteration_*pgm out.gif
- */
-
 #ifdef _CH_
 #pragma package <opencv>
 #endif
