@@ -24,18 +24,6 @@ using namespace std;
 
 IplImage* process_image(IplImage *f, IplImage *u)
 {
-    /*
-    // Let `u` be the current iteration
-    IplImage *u = NULL,
-             *f = NULL;
-
-    f = cvCreateImage(cvSize(t->width, t->height),IPL_DEPTH_8U, 1);
-    cvConvertImage(t, f, 0);
-    
-    // Convert to 8 bit grayscale
-    u = cvCreateImage(cvSize(f->width, f->height),IPL_DEPTH_8U, 1);
-    */
-
     cvCopy(f, u, NULL);
 
     non_convex(f, u, ITERATIONS);
@@ -55,7 +43,6 @@ bool process_image_file(const string s1, const string s2)
     IplImage *f = cvCreateImage(cvSize(t->width, t->height),IPL_DEPTH_8U, 1),
              *u = cvCreateImage(cvSize(t->width, t->height),IPL_DEPTH_8U, 1);
     cvConvertImage(t, f, 0);
-    //cvReleaseImage(&t);
 
     bool save = !s2.empty();
 
@@ -104,6 +91,7 @@ bool process_video_file(const string s1, const string s2)
     }
 
     IplImage *t = NULL,
+             *p = NULL,
              *f = NULL,
              *u = NULL;
 
@@ -124,12 +112,12 @@ bool process_video_file(const string s1, const string s2)
 
             if(save)
             {
-                int isColor = 0;
-                int frameH    = (int)cvGetCaptureProperty(capture, CV_CAP_PROP_FRAME_HEIGHT);
-                int frameW    = (int)cvGetCaptureProperty(capture, CV_CAP_PROP_FRAME_WIDTH);
-                int fps       = (int)cvGetCaptureProperty(capture, CV_CAP_PROP_FPS);
-                //int numFrames = (int)cvGetCaptureProperty(capture, CV_CAP_PROP_FRAME_COUNT);
-                writer = cvCreateVideoWriter(s2.c_str(), CV_FOURCC('P','I','M','1'), fps,cvSize(frameW,frameH),isColor);
+                p = cvCreateImage(cvSize(t->width, t->height),IPL_DEPTH_8U, 3);
+                int fps     = (int)cvGetCaptureProperty(capture, CV_CAP_PROP_FPS),
+                    frameH  = (int)cvGetCaptureProperty(capture, CV_CAP_PROP_FRAME_HEIGHT),
+                    frameW  = (int)cvGetCaptureProperty(capture, CV_CAP_PROP_FRAME_WIDTH);
+
+                writer = cvCreateVideoWriter(s2.c_str(), CV_FOURCC('P','I','M','1'), fps, cvSize(frameW,frameH));
             }
             first = !first;
         }
@@ -137,13 +125,16 @@ bool process_video_file(const string s1, const string s2)
         cvConvertImage(t, f, 0);
         process_image(f, u);
 
+        cvWaitKey(20);
         if(save)
         {
-            cvWriteFrame(writer, u);
+            // cvWriteFrame wants a 3 channel array even
+            // though the values are grayscale.
+            cvCvtColor(u, p, CV_GRAY2BGR);
+            cvWriteFrame(writer, p);
         }
         else
         {
-            cvWaitKey(20);
             cvShowImage(WIN_MODIFIED, u);
             cvShowImage(WIN_ORIGINAL, f);
         }
@@ -166,11 +157,18 @@ int main(int argc, char *argv[])
 
     cout << "Argv[1]: " << s1 << endl << "Argv[2]: " << s2 << endl;
 
-    cvNamedWindow(WIN_ORIGINAL, CV_WINDOW_AUTOSIZE); 
-    cvMoveWindow(WIN_ORIGINAL, 0, 0);
+    /*
+     * If a destination hasn't been specified,
+     * show the results in windows.
+     */
+    if(s2.empty())
+    {
+        cvNamedWindow(WIN_ORIGINAL, CV_WINDOW_AUTOSIZE); 
+        cvMoveWindow(WIN_ORIGINAL, 0, 0);
 
-    cvNamedWindow(WIN_MODIFIED, CV_WINDOW_AUTOSIZE); 
-    cvMoveWindow(WIN_MODIFIED, 200, 200);
+        cvNamedWindow(WIN_MODIFIED, CV_WINDOW_AUTOSIZE); 
+        cvMoveWindow(WIN_MODIFIED, 200, 200);
+    }
 
     cout << "Trying to process as image" << endl;
     if(!process_image_file(s1, s2))
