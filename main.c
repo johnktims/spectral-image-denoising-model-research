@@ -22,6 +22,41 @@
 
 using namespace std;
 
+double psnr(IplImage *f_t, IplImage *u_t)
+{
+    BwImage f(f_t);
+    BwImage u(u_t);
+
+    int x,y,
+        cols = f_t->width,
+        rows = f_t->height;
+    double numerator = log10(cols*rows)+log10(255*255),
+           denominator = 0;
+
+    for(x = 0; x < cols; ++x)
+    {
+        for(y = 0; y < rows; ++y)
+        {
+            denominator += pow(f[x][y] - u[x][y], 2);
+        }
+    }
+    return 10*(numerator-log10(denominator));
+}
+
+void overlay_psnr(IplImage *f, IplImage *u)
+{
+    CvFont font;
+    double hScale = 1;
+    double vScale = 1;
+    int lineWidth = 1;
+    char buffer[35];
+    sprintf(buffer, "PSNR:%f", psnr(f, u));
+
+    cvInitFont(&font, CV_FONT_HERSHEY_PLAIN, hScale, vScale, 0, lineWidth);
+
+    cvPutText (u, buffer, cvPoint(10, 20), &font, cvScalar(255, 255, 255));
+}
+
 IplImage* process_image(IplImage *f, IplImage *u)
 {
     cvCopy(f, u, NULL);
@@ -61,6 +96,7 @@ bool process_image_file(const string s1, const string s2)
     else
     {
         cout << "Show image" << endl;
+        overlay_psnr(f, u);
         cvShowImage(WIN_MODIFIED, u);
         cvShowImage(WIN_ORIGINAL, f);
     }
@@ -141,6 +177,7 @@ bool process_video_file(const string s1, const string s2)
         }
         else
         {
+            overlay_psnr(f, u);
             cvShowImage(WIN_MODIFIED, u);
             cvShowImage(WIN_ORIGINAL, f);
         }
