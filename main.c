@@ -117,6 +117,12 @@ bool process_video_file(const string s1, const string s2)
                     frameH  = (int)cvGetCaptureProperty(capture, CV_CAP_PROP_FRAME_HEIGHT),
                     frameW  = (int)cvGetCaptureProperty(capture, CV_CAP_PROP_FRAME_WIDTH);
 
+                // Certain formats do not support slower frame rates
+                // Ex: MPEG1/2 does not support 15/1 fps
+                if(fps < 25)
+                {
+                    fps = 25;
+                }
                 writer = cvCreateVideoWriter(s2.c_str(), CV_FOURCC('P','I','M','1'), fps, cvSize(frameW,frameH));
             }
             first = !first;
