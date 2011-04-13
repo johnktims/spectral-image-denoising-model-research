@@ -39,7 +39,8 @@ CvMat *cvGaussianKernel(int n, float sigma)
 
     int mid = n / 2,
         x, y;
-    float v;
+    double v,
+          norm=0.0;
 
     CvMat *ker = cvCreateMat(n, n, CV_32FC1);
 
@@ -50,6 +51,17 @@ CvMat *cvGaussianKernel(int n, float sigma)
             v  = exp(-(x * x + y * y)/(2 * sigma));
             v /= 2 * PI * sigma;
             cvmSet(ker, y + mid, x + mid, v);
+            norm += v;
+            printf("NORM: %f\n", norm);
+        }
+    }
+
+    // Normailze kernel
+    for(y = -mid; y <= mid; ++y)
+    {
+        for(x = -mid; x <= mid; ++x)
+        {
+            cvmSet(ker, y + mid, x + mid, cvmGet(ker, y + mid, x + mid)/norm);
         }
     }
 
@@ -107,6 +119,7 @@ int main(int argc, char *argv[])
 {
     // Create a Guassian Kernel that is the same size as the patch
     CvMat *kernel = cvGaussianKernel(P, SIGMA);
+    puts("----");
     cvPrintMatrix(cvGaussianKernel(5, 1));
 
 
@@ -164,7 +177,6 @@ int main(int argc, char *argv[])
 
     float f_x=0.0,
           c_x=0.0,
-          w_x=0.0,
           tmp=0.0;
 
     for(y0 = (P+S)/2; y0 < yn; ++y0)
