@@ -30,6 +30,40 @@
 using namespace std;
 using namespace cv;
 
+IplImage* si(IplImage *img)
+{
+    IplImage *ret = cvCreateImage(cvSize(img->width,
+                                     img->height),
+                                     img->depth,
+                                     img->nChannels);
+
+    int x,y;
+    BwImage i(img);
+    BwImage j(ret);
+
+    j[0][0] = i[0][0];
+
+    for(x = 1; x < img->width; ++x)
+    {
+        j[0][x] = j[0][x-1] + i[0][x];
+    }
+
+    for(y = 1; y < img->height; ++y)
+    {
+        j[y][0] = j[y-1][0] + i[y][0];
+    }
+
+    for(y = 1; y < img->height; ++y)
+    {
+        for(x = 1; x < img->width; ++x)
+        {
+            j[y][x] = j[y][x-1] + j[y-1][x] - j[y-1][x-1] + i[y][x];
+        }
+    }
+
+    return ret;
+}
+
 CvMat *cvGaussianKernel(int n, float sigma)
 {
     if(n % 2 == 0)
