@@ -10,6 +10,7 @@
 #endif
 
 #include <iostream>
+#include <sstream> // isFloat
 
 #include <stdio.h>  // printf
 #include <ctype.h>  // isdigit
@@ -21,6 +22,51 @@
 #define WIN_ORIGINAL "Original"
 
 using namespace std;
+
+float strToFloat(string s)
+{
+    std::istringstream iss(s);
+    float f;
+    iss >> noskipws >> f; // noskipws considers leading whitespace invalid
+    return f;
+}
+
+bool isFloat(string s)
+{
+    std::istringstream iss(s);
+    float f;
+    iss >> noskipws >> f; // noskipws considers leading whitespace invalid
+    // Check the entire string was consumed and if either failbit or badbit is set
+    return iss.eof() && !iss.fail(); 
+}
+
+void addGaussianNoise(IplImage *image_in, IplImage *image_out, double mean, double var)
+{
+    double stddev = sqrt(var);
+    CvRNG rng_state = cvRNG(-1);
+
+    cvRandArr(&rng_state, image_out, CV_RAND_NORMAL,
+            cvRealScalar(mean*255), cvRealScalar(stddev*255));
+    cvAdd(image_in, image_out, image_out);
+}
+
+IplImage* loadGrayscale(const string path)
+{
+    IplImage *src = cvLoadImage(path.c_str(), -1);
+
+    if(!src)
+    {
+        return NULL;
+    }
+
+    IplImage *dst = cvCreateImage(cvSize(src->width, src->height),IPL_DEPTH_8U, 1);
+
+    cvConvertImage(src, dst, 0);
+
+    cvReleaseImage(&src);
+
+    return dst;
+}
 
 double psnr(IplImage *f_t, IplImage *u_t)
 {
@@ -57,15 +103,23 @@ void overlay_psnr(IplImage *f, IplImage *u)
     cvPutText (u, buffer, cvPoint(10, 20), &font, cvScalar(255, 255, 255));
 }
 
-IplImage* process_image(IplImage *f, IplImage *u)
+IplImage* process_image(IplImage *f, IplImage *u, const string opt, const float var)
 {
     cvCopy(f, u, NULL);
 
-    non_convex(f, u, ITERATIONS);
+    if(opt == "convex")
+    {
+        non_convex(f, u, ITERATIONS);
+    }
+    else if(opt == "noise")
+    {
+        addGaussianNoise(f, u, 0, var);
+    }
+
     return u;
 }
 
-bool process_image_file(const string s1, const string s2)
+bool process_image_file(const string s1, const string s2, const string opt, const float var)
 {
     IplImage *t = cvLoadImage(s1.c_str(), -1);
 
@@ -86,7 +140,7 @@ bool process_image_file(const string s1, const string s2)
         return false;
     }
 
-    process_image(f, u);
+    process_image(f, u, opt, var);
 
     if(save)
     {
@@ -104,7 +158,7 @@ bool process_image_file(const string s1, const string s2)
     return true;
 }
 
-bool process_video_file(const string s1, const string s2)
+bool process_video_file(const string s1, const string s2, const string opt, const float var)
 {
     CvCapture     *capture = NULL;
     CvVideoWriter *writer  = NULL;
@@ -165,7 +219,7 @@ bool process_video_file(const string s1, const string s2)
         }
 
         cvConvertImage(t, f, 0);
-        process_image(f, u);
+        process_image(f, u, opt, var);
 
         cvWaitKey(20);
         if(save)
@@ -193,18 +247,86 @@ void print_options(void)
     puts("Syntax: ./program file.(jpg|png|pgm|etc)");
 }
 
+bool is_valid_option(const char* haystack[], const char* needle)
+{
+    const char** current = haystack;
+    while(*current != NULL)
+    {
+        if(strcmp(needle, *current) == 0)
+        {
+            return true;
+        }
+        ++current;
+    }
+    return false;
+}
+
 int main(int argc, char *argv[])
 {
-    string s1 = (argc > 1) ? argv[1] : "",
-           s2 = (argc > 2) ? argv[2] : "";
+    // Declare possible command-line options
+    const char *options[] = {
+        "noise",
+        "convex",
+        "nlm",
+        NULL
+    };
 
-    cout << "Argv[1]: " << s1 << endl << "Argv[2]: " << s2 << endl;
+    // Set default parameters
+    string src = "",
+           dst = "",
+           opt = "noise";
+
+    float var = 0.01;
+
+    // Process command-line options
+    if(argc > 1)
+    {
+        if(!is_valid_option(options, argv[1]))
+        {
+            printf("`%s` is not a valid option. Defaulting to `noise`\n", argv[1]);
+            src = argv[1];
+            if(argc > 2)
+            {
+                if(!isFloat(argv[2]))
+                {
+                    dst = argv[2];
+                    var = (argc > 3 && isFloat(argv[3]) && opt=="noise") ? strToFloat(argv[3]) : 0.01;
+                }
+                else
+                {
+                    var = strToFloat(argv[2]);
+                }
+            }
+        }
+        else
+        {
+            opt = argv[1];
+            src = (argc > 2) ? argv[2] : "";
+            if(argc > 3)
+            {
+                if(!isFloat(argv[3]))
+                {
+                    dst = argv[3];
+                    var = (argc > 4 && isFloat(argv[4]) && opt=="noise") ? strToFloat(argv[4]) : 0.01;
+                }
+                else
+                {
+                    var = strToFloat(argv[2]);
+                }
+            }
+        }
+    }
+
+    cout << "opt: " << opt << endl
+         << "src: " << src << endl
+         << "dst: " << dst << endl
+         << "var: " << var << endl;
 
     /*
      * If a destination hasn't been specified,
      * show the results in windows.
      */
-    if(s2.empty())
+    if(dst.empty())
     {
         cvNamedWindow(WIN_ORIGINAL, CV_WINDOW_AUTOSIZE); 
         cvMoveWindow(WIN_ORIGINAL, 0, 0);
@@ -213,22 +335,20 @@ int main(int argc, char *argv[])
         cvMoveWindow(WIN_MODIFIED, 200, 200);
     }
 
-    cout << "Trying to process as image" << endl;
-    if(!process_image_file(s1, s2))
+    if(!process_image_file(src, dst, opt, var))
     {
-        cout << "Trying to process as video" << endl;
-        if(!process_video_file(s1, s2))
+        if(!process_video_file(src, dst, opt, var))
         {
             print_options();
         }
     }
 
     /*
-     * If s2 is empty, then the results are being
+     * If dst is empty, then the results are being
      * displayed in windows, so keep them open
      * until a key is pressed
      */
-    if(s2.empty())
+    if(dst.empty())
     {
         cout << "Waiting...." << endl;
         cvWaitKey(0);
