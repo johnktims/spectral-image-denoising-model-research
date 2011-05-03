@@ -229,7 +229,7 @@ bool isFloat(string s)
 void addGaussianNoise(IplImage *image_in, IplImage *image_out, double mean, double var)
 {
     double stddev = sqrt(var);
-    CvRNG rng_state = cvRNG(-1);
+    static CvRNG rng_state = cvRNG(-1);
 
     cvRandArr(&rng_state, image_out, CV_RAND_NORMAL,
             cvRealScalar(mean*255), cvRealScalar(stddev*255));
