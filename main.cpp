@@ -19,7 +19,6 @@
 #include "models.h"
 
 #define PI 3.14159265
-#define ITERATIONS 5
 
 #define S 21
 #define P 7
@@ -32,6 +31,13 @@
 using namespace TCLAP;
 using namespace std;
 using namespace cv;
+
+typedef struct _options
+{
+    string method;
+    int iterations;
+    float var;
+} options;
 
 IplImage* si(IplImage *img)
 {
@@ -292,19 +298,19 @@ void overlay_psnr(IplImage *f, IplImage *u)
     cvPutText (u, buffer, cvPoint(10, 20), &font, cvScalar(255, 255, 255));
 }
 
-IplImage* process_image(IplImage *f, IplImage *u, const string opt, const float var)
+IplImage* process_image(IplImage *f, IplImage *u, options opt)
 {
     cvCopy(f, u, NULL);
 
-    if(opt == "convex")
+    if(opt.method == "non-convex")
     {
-        non_convex(f, u, ITERATIONS);
+        non_convex(f, u, opt.iterations);
     }
-    else if(opt == "noise")
+    else if(opt.method == "noise")
     {
-        addGaussianNoise(f, u, 0, var);
+        addGaussianNoise(f, u, 0, opt.var);
     }
-    else if(opt == "nlm")
+    else if(opt.method == "nlm-naive")
     {
         nlm_naive(f, u);
     }
@@ -312,13 +318,12 @@ IplImage* process_image(IplImage *f, IplImage *u, const string opt, const float 
     return u;
 }
 
-bool process_image_file(const string s1, const string s2, const string opt, const float var)
+bool process_image_file(const string s1, const string s2, options opt)
 {
     IplImage *t = cvLoadImage(s1.c_str(), -1);
 
     if(!t)
     {
-        cout << "Failed to load image: " << s1 << endl;
         return false;
     }
 
@@ -333,16 +338,15 @@ bool process_image_file(const string s1, const string s2, const string opt, cons
         return false;
     }
 
-    process_image(f, u, opt, var);
+    process_image(f, u, opt);
 
     if(save)
     {
-        cout << "Saving image: `" << s2 << "`" << endl;
+        printf("PSNR: %f\n", psnr(f, u));
         cvSaveImage(s2.c_str(), u);
     }
     else
     {
-        cout << "Show image" << endl;
         overlay_psnr(f, u);
         cvShowImage(WIN_MODIFIED, u);
         cvShowImage(WIN_ORIGINAL, f);
@@ -351,7 +355,7 @@ bool process_image_file(const string s1, const string s2, const string opt, cons
     return true;
 }
 
-bool process_video_file(const string s1, const string s2, const string opt, const float var)
+bool process_video_file(const string s1, const string s2, options opt)
 {
     CvCapture     *capture = NULL;
     CvVideoWriter *writer  = NULL;
@@ -412,11 +416,13 @@ bool process_video_file(const string s1, const string s2, const string opt, cons
         }
 
         cvConvertImage(t, f, 0);
-        process_image(f, u, opt, var);
+        process_image(f, u, opt);
 
         cvWaitKey(20);
         if(save)
         {
+            printf("PSNR: %f\n", psnr(f, u));
+
             // cvWriteFrame wants a 3 channel array even
             // though the values are grayscale.
             cvCvtColor(u, p, CV_GRAY2BGR);
@@ -454,13 +460,13 @@ bool is_valid_option(const char* haystack[], const char* needle)
     return false;
 }
 
-
 int main(int argc, char **argv)
 {
     string src,
            dst,
            method;
     float var;
+    int itr;
 
     try
     {
@@ -474,6 +480,9 @@ int main(int argc, char **argv)
 
         ValueArg<float> _var("n", "variance", "Variance for zero-mean noise", false, 0.01, "float");
         cmd.add(_var);
+
+        ValueArg<int> _itr("i", "iterations", "Iterations for non-convex method", false, 10, "int");
+        cmd.add(_itr);
 
         // Limit methods to the following:
         vector<string> _allowed;
@@ -490,11 +499,21 @@ int main(int argc, char **argv)
 
         cmd.parse(argc, argv);
 
+        // Saved the parsed command-line results into local variables
         src = _src.getValue();
         dst = _dst.getValue();
+
+        itr = _itr.getValue();
+        var = _var.getValue();
+
         method = _method.getValue();
 
-        var = _var.getValue();
+        // Prepare the options that will be needed by the processing functions
+        // This has only been used to keep the calling interfaces the same.
+        options opt;
+        opt.var = var;
+        opt.method = method;
+        opt.iterations = itr;
 
         /*
          * If a destination hasn't been specified,
@@ -509,11 +528,13 @@ int main(int argc, char **argv)
             cvMoveWindow(WIN_MODIFIED, 200, 200);
         }
 
-        if(!process_image_file(src, dst, method, var))
+        if(!process_image_file(src, dst, opt))
         {
-            if(!process_video_file(src, dst, method, var))
+            puts("Failed to processes as an image. Assume video....");
+            if(!process_video_file(src, dst, opt))
             {
-                print_options();
+                puts("Failed to process as video. File must be corrupt "
+                     "or uses and unsupported format.");
             }
         }
 
