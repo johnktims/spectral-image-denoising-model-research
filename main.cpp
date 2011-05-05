@@ -11,6 +11,8 @@
 
 #include <iostream>
 #include <sstream> // isFloat
+#include <algorithm> // TCLAP
+#include <tclap/CmdLine.h> // TCLAP
 
 #include <stdio.h>  // printf
 #include <ctype.h>  // isdigit
@@ -27,6 +29,7 @@
 #define WIN_MODIFIED "Modified"
 #define WIN_ORIGINAL "Original"
 
+using namespace TCLAP;
 using namespace std;
 using namespace cv;
 
@@ -452,97 +455,83 @@ bool is_valid_option(const char* haystack[], const char* needle)
 }
 
 
-int main(int argc, char *argv[])
+int main(int argc, char **argv)
 {
-    // Declare possible command-line options
-    const char *options[] = {
-        "noise",
-        "convex",
-        "nlm",
-        NULL
-    };
+    string src,
+           dst,
+           method;
+    float var;
 
-    // Set default parameters
-    string src = "",
-           dst = "",
-           opt = "noise";
-
-    float var = 0.01;
-
-    // Process command-line options
-    if(argc > 1)
+    try
     {
-        if(!is_valid_option(options, argv[1]))
+        CmdLine cmd("Image Denoising Program", ' ', "0.1");
+
+        UnlabeledValueArg<string> _src("source", "Source Image/Video", true, "", "string");
+        cmd.add(_src);
+
+        UnlabeledValueArg<string> _dst("destination", "Destination Image/Video", false, "", "string");
+        cmd.add(_dst);
+
+        ValueArg<float> _var("n", "variance", "Variance for zero-mean noise", false, 0.01, "float");
+        cmd.add(_var);
+
+        // Limit methods to the following:
+        vector<string> _allowed;
+        _allowed.push_back("noise");
+        _allowed.push_back("nlm-naive");
+        _allowed.push_back("nlm-mean");
+        _allowed.push_back("non-convex");
+        //_allowed.push_back("nlm-conv");
+        ValuesConstraint<string> _allowedMethods(_allowed);
+
+        ValueArg<string> _method("m", "method", "Method to use on image/video",
+        false, "noise", &_allowedMethods);
+        cmd.add(_method);
+
+        cmd.parse(argc, argv);
+
+        src = _src.getValue();
+        dst = _dst.getValue();
+        method = _method.getValue();
+
+        var = _var.getValue();
+
+        /*
+         * If a destination hasn't been specified,
+         * show the results in windows.
+         */
+        if(dst.empty())
         {
-            printf("`%s` is not a valid option. Defaulting to `noise`\n", argv[1]);
-            src = argv[1];
-            if(argc > 2)
+            cvNamedWindow(WIN_ORIGINAL, CV_WINDOW_AUTOSIZE); 
+            cvMoveWindow(WIN_ORIGINAL, 0, 0);
+
+            cvNamedWindow(WIN_MODIFIED, CV_WINDOW_AUTOSIZE); 
+            cvMoveWindow(WIN_MODIFIED, 200, 200);
+        }
+
+        if(!process_image_file(src, dst, method, var))
+        {
+            if(!process_video_file(src, dst, method, var))
             {
-                if(!isFloat(argv[2]))
-                {
-                    dst = argv[2];
-                    var = (argc > 3 && isFloat(argv[3]) && opt=="noise") ? strToFloat(argv[3]) : 0.01;
-                }
-                else
-                {
-                    var = strToFloat(argv[2]);
-                }
+                print_options();
             }
         }
-        else
+
+        /*
+         * If dst is empty, then the results are being
+         * displayed in windows, so keep them open
+         * until a key is pressed
+         */
+        if(dst.empty())
         {
-            opt = argv[1];
-            src = (argc > 2) ? argv[2] : "";
-            if(argc > 3)
-            {
-                if(!isFloat(argv[3]))
-                {
-                    dst = argv[3];
-                    var = (argc > 4 && isFloat(argv[4]) && opt=="noise") ? strToFloat(argv[4]) : 0.01;
-                }
-                else
-                {
-                    var = strToFloat(argv[2]);
-                }
-            }
+            cout << "Press any key to exit...." << endl;
+            cvWaitKey(0);
         }
-    }
 
-    cout << "opt: " << opt << endl
-         << "src: " << src << endl
-         << "dst: " << dst << endl
-         << "var: " << var << endl;
-
-    /*
-     * If a destination hasn't been specified,
-     * show the results in windows.
-     */
-    if(dst.empty())
-    {
-        cvNamedWindow(WIN_ORIGINAL, CV_WINDOW_AUTOSIZE); 
-        cvMoveWindow(WIN_ORIGINAL, 0, 0);
-
-        cvNamedWindow(WIN_MODIFIED, CV_WINDOW_AUTOSIZE); 
-        cvMoveWindow(WIN_MODIFIED, 200, 200);
-    }
-
-    if(!process_image_file(src, dst, opt, var))
-    {
-        if(!process_video_file(src, dst, opt, var))
-        {
-            print_options();
-        }
-    }
-
-    /*
-     * If dst is empty, then the results are being
-     * displayed in windows, so keep them open
-     * until a key is pressed
-     */
-    if(dst.empty())
-    {
-        cout << "Waiting...." << endl;
-        cvWaitKey(0);
+	}
+    catch (ArgException &e)  // catch any exceptions
+	{
+        cerr << "error: " << e.error() << " for arg " << e.argId() << endl;
     }
 
     return 0;
