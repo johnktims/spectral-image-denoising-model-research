@@ -12,6 +12,13 @@
 #include "highgui.h"
 #endif
 
+typedef struct _options
+{
+    string method;
+    int iterations;
+    float var;
+} options;
+
 template<class T> class Image
 {
   public:
@@ -37,7 +44,21 @@ typedef Image<unsigned char>  BwImage;
 typedef Image<float>          BwImageFloat;
 typedef Image<double>         BwImageDouble;
 
+// non-convex
 void non_convex(IplImage*, IplImage*, int);
+
+// nlm-naive
+CvMat *cvGaussianKernel(int, float);
+float cvGaussianWeightedDistance(CvMat*, IplImage *, IplImage *);
+void cvGetSubImage(IplImage*, IplImage*, CvRect);
+void nlm_naive(IplImage*, IplImage*);
+
+// nlm-mean
+template<class T> T si_sum(Image<T>, int, int, int);
+void nlm_mean(IplImage*, IplImage*);
+
+// noise
+void addGaussianNoise(IplImage*, IplImage*, double, double);
 
 #endif /* MODELS_H */
 
