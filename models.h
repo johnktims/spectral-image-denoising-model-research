@@ -44,6 +44,8 @@ typedef Image<unsigned char>  BwImage;
 typedef Image<float>          BwImageFloat;
 typedef Image<double>         BwImageDouble;
 
+double psnr(IplImage*, IplImage*);
+
 // non-convex
 void non_convex(IplImage*, IplImage*, int);
 

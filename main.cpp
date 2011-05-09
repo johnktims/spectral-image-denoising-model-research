@@ -27,44 +27,109 @@ using namespace std;
 using namespace cv;
 
 
-IplImage* loadGrayscale(const string path)
+void overlay_psnr(IplImage*, IplImage*);
+bool process_image_file(const string, const string, options);
+bool process_video_file(const string, const string, options);
+IplImage* process_image(IplImage*, IplImage*, options);
+
+
+int main(int argc, char **argv)
 {
-    IplImage *src = cvLoadImage(path.c_str(), -1);
+    string src,
+           dst,
+           method;
+    float var;
+    int itr;
 
-    if(!src)
+    try
     {
-        return NULL;
-    }
+        CmdLine cmd("Image Denoising Program", ' ', "0.1");
 
-    IplImage *dst = cvCreateImage(cvSize(src->width, src->height),IPL_DEPTH_8U, 1);
+        UnlabeledValueArg<string> _src("source", "Source Image/Video", true, "", "string");
+        cmd.add(_src);
 
-    cvConvertImage(src, dst, 0);
+        UnlabeledValueArg<string> _dst("destination", "Destination Image/Video", false, "", "string");
+        cmd.add(_dst);
 
-    cvReleaseImage(&src);
+        ValueArg<float> _var("n", "variance", "Variance for zero-mean noise", false, 0.01, "float");
+        cmd.add(_var);
 
-    return dst;
-}
+        ValueArg<int> _itr("i", "iterations", "Iterations for non-convex method", false, 10, "int");
+        cmd.add(_itr);
 
-double psnr(IplImage *f_t, IplImage *u_t)
-{
-    BwImage f(f_t);
-    BwImage u(u_t);
+        // Limit methods to the following:
+        vector<string> _allowed;
+        _allowed.push_back("noise");
+        _allowed.push_back("nlm-naive");
+        _allowed.push_back("nlm-mean");
+        _allowed.push_back("non-convex");
+        //_allowed.push_back("nlm-conv");
+        ValuesConstraint<string> _allowedMethods(_allowed);
 
-    int x,y,
-        cols = f_t->width,
-        rows = f_t->height;
-    double numerator = log10(cols*rows)+log10(255*255),
-           denominator = 0;
+        ValueArg<string> _method("m", "method", "Method to use on image/video", false, "noise", &_allowedMethods);
+        cmd.add(_method);
 
-    for(x = 0; x < cols; ++x)
-    {
-        for(y = 0; y < rows; ++y)
+        cmd.parse(argc, argv);
+
+        // Saved the parsed command-line results into local variables
+        src = _src.getValue();
+        dst = _dst.getValue();
+
+        itr = _itr.getValue();
+        var = _var.getValue();
+
+        method = _method.getValue();
+
+        // Prepare the options that will be needed by the processing functions
+        // This has only been used to keep the calling interfaces the same.
+        options opt;
+        opt.var = var;
+        opt.method = method;
+        opt.iterations = itr;
+
+        /*
+         * If a destination hasn't been specified,
+         * show the results in windows.
+         */
+        if(dst.empty())
         {
-            denominator += pow(f[x][y] - u[x][y], 2);
+            cvNamedWindow(WIN_ORIGINAL, CV_WINDOW_AUTOSIZE); 
+            cvMoveWindow(WIN_ORIGINAL, 0, 0);
+
+            cvNamedWindow(WIN_MODIFIED, CV_WINDOW_AUTOSIZE); 
+            cvMoveWindow(WIN_MODIFIED, 200, 200);
         }
+
+        if(!process_image_file(src, dst, opt))
+        {
+            puts("Failed to processes as an image. Assume video....");
+            if(!process_video_file(src, dst, opt))
+            {
+                puts("Failed to process as video. File must be corrupt "
+                     "or uses an unsupported format.");
+            }
+        }
+
+        /*
+         * If dst is empty, then the results are being
+         * displayed in windows, so keep them open
+         * until a key is pressed
+         */
+        if(dst.empty())
+        {
+            cout << "Press any key to exit...." << endl;
+            cvWaitKey(0);
+        }
+
+	}
+    catch (ArgException &e)  // catch any exceptions
+	{
+        cerr << "error: " << e.error() << " for arg " << e.argId() << endl;
     }
-    return 10*(numerator-log10(denominator));
+
+    return 0;
 }
+
 
 void overlay_psnr(IplImage *f, IplImage *u)
 {
@@ -79,6 +144,7 @@ void overlay_psnr(IplImage *f, IplImage *u)
 
     cvPutText (u, buffer, cvPoint(10, 20), &font, cvScalar(255, 255, 255));
 }
+
 
 IplImage* process_image(IplImage *f, IplImage *u, options opt)
 {
@@ -226,101 +292,3 @@ bool process_video_file(const string s1, const string s2, options opt)
 
     return true;
 }
-
-int main(int argc, char **argv)
-{
-    string src,
-           dst,
-           method;
-    float var;
-    int itr;
-
-    try
-    {
-        CmdLine cmd("Image Denoising Program", ' ', "0.1");
-
-        UnlabeledValueArg<string> _src("source", "Source Image/Video", true, "", "string");
-        cmd.add(_src);
-
-        UnlabeledValueArg<string> _dst("destination", "Destination Image/Video", false, "", "string");
-        cmd.add(_dst);
-
-        ValueArg<float> _var("n", "variance", "Variance for zero-mean noise", false, 0.01, "float");
-        cmd.add(_var);
-
-        ValueArg<int> _itr("i", "iterations", "Iterations for non-convex method", false, 10, "int");
-        cmd.add(_itr);
-
-        // Limit methods to the following:
-        vector<string> _allowed;
-        _allowed.push_back("noise");
-        _allowed.push_back("nlm-naive");
-        _allowed.push_back("nlm-mean");
-        _allowed.push_back("non-convex");
-        //_allowed.push_back("nlm-conv");
-        ValuesConstraint<string> _allowedMethods(_allowed);
-
-        ValueArg<string> _method("m", "method", "Method to use on image/video", false, "noise", &_allowedMethods);
-        cmd.add(_method);
-
-        cmd.parse(argc, argv);
-
-        // Saved the parsed command-line results into local variables
-        src = _src.getValue();
-        dst = _dst.getValue();
-
-        itr = _itr.getValue();
-        var = _var.getValue();
-
-        method = _method.getValue();
-
-        // Prepare the options that will be needed by the processing functions
-        // This has only been used to keep the calling interfaces the same.
-        options opt;
-        opt.var = var;
-        opt.method = method;
-        opt.iterations = itr;
-
-        /*
-         * If a destination hasn't been specified,
-         * show the results in windows.
-         */
-        if(dst.empty())
-        {
-            cvNamedWindow(WIN_ORIGINAL, CV_WINDOW_AUTOSIZE); 
-            cvMoveWindow(WIN_ORIGINAL, 0, 0);
-
-            cvNamedWindow(WIN_MODIFIED, CV_WINDOW_AUTOSIZE); 
-            cvMoveWindow(WIN_MODIFIED, 200, 200);
-        }
-
-        if(!process_image_file(src, dst, opt))
-        {
-            puts("Failed to processes as an image. Assume video....");
-            if(!process_video_file(src, dst, opt))
-            {
-                puts("Failed to process as video. File must be corrupt "
-                     "or uses an unsupported format.");
-            }
-        }
-
-        /*
-         * If dst is empty, then the results are being
-         * displayed in windows, so keep them open
-         * until a key is pressed
-         */
-        if(dst.empty())
-        {
-            cout << "Press any key to exit...." << endl;
-            cvWaitKey(0);
-        }
-
-	}
-    catch (ArgException &e)  // catch any exceptions
-	{
-        cerr << "error: " << e.error() << " for arg " << e.argId() << endl;
-    }
-
-    return 0;
-}
-

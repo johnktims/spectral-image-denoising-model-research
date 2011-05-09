@@ -31,6 +31,28 @@
 #include <math.h>
 #include "models.h"
 
+double psnr(IplImage *f_t, IplImage *u_t)
+{
+    BwImage f(f_t);
+    BwImage u(u_t);
+
+    int x,y,
+        cols = f_t->width,
+        rows = f_t->height;
+    double numerator = log10(cols*rows)+log10(255*255),
+           denominator = 0;
+
+    for(x = 0; x < cols; ++x)
+    {
+        for(y = 0; y < rows; ++y)
+        {
+            denominator += pow(f[x][y] - u[x][y], 2);
+        }
+    }
+    return 10*(numerator-log10(denominator));
+}
+
+
 void non_convex(IplImage* f_t, IplImage* un_t, int N)
 {
     IplImage* u_t = cvCreateImage(cvSize(f_t->width, f_t->height), f_t->depth, f_t->nChannels);
