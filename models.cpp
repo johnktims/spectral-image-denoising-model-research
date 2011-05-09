@@ -31,15 +31,19 @@
 #include <math.h>
 #include "models.h"
 
-double psnr(IplImage *f_t, IplImage *u_t)
+/****************************************************************************
+ * @brief Calculate the PSNR of the two given images
+ * @return The PSNR value
+ ****************************************************************************/
+double psnr(IplImage *original, IplImage *output)
 {
-    BwImage f(f_t);
-    BwImage u(u_t);
+    BwImage f(original);
+    BwImage u(output);
 
     int x,y,
-        cols = f_t->width,
-        rows = f_t->height;
-    double numerator = log10(cols*rows)+log10(255*255),
+        cols = original->width,
+        rows = original->height;
+    double numerator   = log10(cols*rows)+log10(255*255),
            denominator = 0;
 
     for(x = 0; x < cols; ++x)
@@ -53,6 +57,9 @@ double psnr(IplImage *f_t, IplImage *u_t)
 }
 
 
+/****************************************************************************
+ * @brief Perform N iterations of the non-convex model
+ ****************************************************************************/
 void non_convex(IplImage* f_t, IplImage* un_t, int N)
 {
     IplImage* u_t = cvCreateImage(cvSize(f_t->width, f_t->height), f_t->depth, f_t->nChannels);
@@ -143,6 +150,11 @@ void non_convex(IplImage* f_t, IplImage* un_t, int N)
     }
 }
 
+
+/****************************************************************************
+ * @brief Create a gaussian kernel matrix of size `n` and variance `sigma`
+ * @return An NxN matrix
+ ****************************************************************************/
 CvMat *cvGaussianKernel(int n, float sigma)
 {
     if(n % 2 == 0)
@@ -155,7 +167,6 @@ CvMat *cvGaussianKernel(int n, float sigma)
     int mid = n / 2,
         x, y;
     float v;
-    //float norm=0.0;
 
     CvMat *ker = cvCreateMat(n, n, CV_32FC1);
 
@@ -184,6 +195,12 @@ CvMat *cvGaussianKernel(int n, float sigma)
     return ker;
 }
 
+
+/****************************************************************************
+ * @brief Calculate the Gaussian Weighted Distance between `i` and `j` using
+ *        the previously calculated Gaussian kernel.
+ * @return The Gaussian Weighted Distance
+ ****************************************************************************/
 float cvGaussianWeightedDistance(CvMat *kernel, IplImage *i, IplImage *j)
 {
     float ret = 0;
@@ -210,6 +227,10 @@ float cvGaussianWeightedDistance(CvMat *kernel, IplImage *i, IplImage *j)
     return ret;
 }
 
+
+/****************************************************************************
+ * @brief  Copies a subimage into an array
+ ****************************************************************************/
 void cvGetSubImage(IplImage* img, IplImage* subImg, CvRect roiRect)
 {
     cvSetImageROI(img, roiRect);
@@ -217,33 +238,37 @@ void cvGetSubImage(IplImage* img, IplImage* subImg, CvRect roiRect)
     cvResetImageROI(img);
 }
 
+
+/****************************************************************************
+ * @brief Perform the Buades version of the Non-Local Mean Method
+ ****************************************************************************/
 void nlm_naive(IplImage *original, IplImage *output)
 {
-    // Create a Guassian Kernel that is the same size as the patch
+    // Create a Guassian Kernel that is the same size as the patches
     static CvMat *kernel = cvGaussianKernel(NLM_NAIVE_P, NLM_NAIVE_SIGMA);
 
-    // Create patches and search windows
+    // Create patches
     static IplImage *i_patch = cvCreateImage(cvSize(NLM_NAIVE_P, NLM_NAIVE_P), IPL_DEPTH_8U, 1),
                     *j_patch = cvCreateImage(cvSize(NLM_NAIVE_P, NLM_NAIVE_P), IPL_DEPTH_8U, 1);
 
-
-    // NLM_NAIVE_Prepare for convolution
+    // Create padded matrix
     static IplImage *padded = cvCreateImage(cvSize(original->width+NLM_NAIVE_S+NLM_NAIVE_P,
                                      original->height+NLM_NAIVE_S+NLM_NAIVE_P),
                                      original->depth,
                                      original->nChannels);
-             
 
+    // Create weight matrix
     static CvMat *weight = cvCreateMat(NLM_NAIVE_S, NLM_NAIVE_S, CV_32FC1);
 
-    // Pad borders for convolution
+    // Insert original image into padded matrix
     CvPoint offset = cvPoint((NLM_NAIVE_S+NLM_NAIVE_P-1)/2,(NLM_NAIVE_S+NLM_NAIVE_P-1)/2);
     cvCopyMakeBorder(original, padded, offset, IPL_BORDER_REPLICATE, cvScalarAll(0));
 
-
+    // Use wrappers for easy matrix access
     BwImage u(output);
     BwImage f(padded);
 
+    // Translate original coordinates into coordinates for the padded matrix
     int x0 = (NLM_NAIVE_P+NLM_NAIVE_S)/2, xn = padded->width  - (NLM_NAIVE_P+NLM_NAIVE_S)/2,
         y0 = (NLM_NAIVE_P+NLM_NAIVE_S)/2, yn = padded->height - (NLM_NAIVE_P+NLM_NAIVE_S)/2,
         sx, sy;
@@ -252,6 +277,7 @@ void nlm_naive(IplImage *original, IplImage *output)
           c_x=0.0,
           tmp=0.0;
 
+    // Iterate over padded matrix
     for(y0 = (NLM_NAIVE_P+NLM_NAIVE_S)/2; y0 < yn; ++y0)
     {
         for(x0 = (NLM_NAIVE_P+NLM_NAIVE_S)/2; x0 < xn; ++x0)
@@ -291,23 +317,27 @@ void nlm_naive(IplImage *original, IplImage *output)
 }
 
 
+/****************************************************************************
+ * @brief  Calculate the sum of a given rectangle using the previously
+ *         computed Integral Image matrix
+ * @return The sum of the rectangle
+ ****************************************************************************/
 template<class T>
 T si_sum(Image<T> img, int y, int x, int w)
 {
     int d = w/2;
     x += d;
     y += d;
-    //printf("Dim: %d\n", d);
     double t = img[y+1][x+1] - img[y+1][x-w] - img[y-w][x+1] + img[y-w][x-w];
     //printf("%d=>%d@(%dx%d): %f-%f-%f+%f=%f\n",
     //w,d,x,y,img[y+1][x+1],img[y+1][x-w],img[y-w][x+1],img[y-w][x-w],t);
-
-    //printf("(%dx%d):%f-%f-%f+%f=%f\n", y,x,img[y][x], img[y][x-w+1],
-    //img[y-w+1][x], 2*img[y-w+1][x-w+1], t);
     return t;
 }
 
 
+/****************************************************************************
+ * @brief Perform the Karnati/Uliyar version of the Non-Local Mean Method
+ ****************************************************************************/
 void nlm_mean(IplImage *original, IplImage *output)
 {
     //BwImage o(original);
@@ -454,6 +484,10 @@ void nlm_mean(IplImage *original, IplImage *output)
 
 }
 
+
+/****************************************************************************
+ * @brief Add Gaussian Noise to an image with the given mean and variance.
+ ****************************************************************************/
 void addGaussianNoise(IplImage *image_in, IplImage *image_out, double mean, double var)
 {
     double stddev = sqrt(var);

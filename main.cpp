@@ -10,15 +10,11 @@
 #endif
 
 #include <iostream>
-
-// TCLAP
-#include <algorithm>
 #include <tclap/CmdLine.h>
 
-#include <stdlib.h> // printf
-#include <ctype.h>  // isdigit
 #include "models.h"
 
+// Name output windows
 #define WIN_MODIFIED "Modified"
 #define WIN_ORIGINAL "Original"
 
@@ -26,8 +22,9 @@ using namespace TCLAP;
 using namespace std;
 using namespace cv;
 
-
 void overlay_psnr(IplImage*, IplImage*);
+
+// Declare image and video processing functions
 bool process_image_file(const string, const string, options);
 bool process_video_file(const string, const string, options);
 IplImage* process_image(IplImage*, IplImage*, options);
@@ -41,34 +38,42 @@ int main(int argc, char **argv)
     float var;
     int itr;
 
+    // Parse command-line arguments
     try
     {
+        // Name program and version
         CmdLine cmd("Image Denoising Program", ' ', "0.1");
 
-        UnlabeledValueArg<string> _src("source", "Source Image/Video", true, "", "string");
+        // Get path to source image/video. If missing, the program exits.
+        UnlabeledValueArg<string> _src("source", "Path to source image/video", true, "", "string");
         cmd.add(_src);
 
-        UnlabeledValueArg<string> _dst("destination", "Destination Image/Video", false, "", "string");
+        // Path to save results. If this is missing, display the results in a window.
+        UnlabeledValueArg<string> _dst("destination", "Output file for saving results", false, "", "string");
         cmd.add(_dst);
 
+        // The variance of the gaussian distribution used when applying noise
         ValueArg<float> _var("n", "variance", "Variance for zero-mean noise", false, 0.01, "float");
         cmd.add(_var);
 
+        // The number of iterations for the non-convex method.
         ValueArg<int> _itr("i", "iterations", "Iterations for non-convex method", false, 10, "int");
         cmd.add(_itr);
 
+        // The list of methods that this program can apply
         // Limit methods to the following:
         vector<string> _allowed;
         _allowed.push_back("noise");
         _allowed.push_back("nlm-naive");
         _allowed.push_back("nlm-mean");
         _allowed.push_back("non-convex");
-        //_allowed.push_back("nlm-conv");
         ValuesConstraint<string> _allowedMethods(_allowed);
 
+        // The method to use for processing the given input
         ValueArg<string> _method("m", "method", "Method to use on image/video", false, "noise", &_allowedMethods);
         cmd.add(_method);
 
+        // Parse the command-line and fill the appropriate variables
         cmd.parse(argc, argv);
 
         // Saved the parsed command-line results into local variables
@@ -131,6 +136,9 @@ int main(int argc, char **argv)
 }
 
 
+/****************************************************************************
+ * @brief Overlay the PSNR of the provided images on the output image
+ ****************************************************************************/
 void overlay_psnr(IplImage *f, IplImage *u)
 {
     CvFont font;
@@ -146,12 +154,16 @@ void overlay_psnr(IplImage *f, IplImage *u)
 }
 
 
+/****************************************************************************
+ * @brief Pass the provided input buffer to the correct function as chosen
+ *        by the value set in the `opt` struct.
+ ****************************************************************************/
 IplImage* process_image(IplImage *f, IplImage *u, options opt)
 {
-    cvCopy(f, u, NULL);
 
     if(opt.method == "non-convex")
     {
+        cvCopy(f, u, NULL);
         non_convex(f, u, opt.iterations);
     }
     else if(opt.method == "noise")
@@ -170,6 +182,11 @@ IplImage* process_image(IplImage *f, IplImage *u, options opt)
     return u;
 }
 
+
+/****************************************************************************
+ * @brief Try to read the given path as an image
+ * @return false if the image cannot be loaded, and true otherwise
+ ****************************************************************************/
 bool process_image_file(const string s1, const string s2, options opt)
 {
     IplImage *t = cvLoadImage(s1.c_str(), -1);
@@ -207,6 +224,11 @@ bool process_image_file(const string s1, const string s2, options opt)
     return true;
 }
 
+
+/****************************************************************************
+ * @brief Try to read the given path as a video
+ * @return false if video cannot be loaded, and true otherwise
+ ****************************************************************************/
 bool process_video_file(const string s1, const string s2, options opt)
 {
     CvCapture     *capture = NULL;
