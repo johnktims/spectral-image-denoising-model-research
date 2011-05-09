@@ -10,20 +10,33 @@
 #endif
 
 #include <iostream>
-#include <sstream> // isFloat
-#include <algorithm> // TCLAP
-#include <tclap/CmdLine.h> // TCLAP
 
-#include <stdio.h>  // printf
+// TCLAP
+#include <algorithm>
+#include <tclap/CmdLine.h>
+
+#include <stdio.h>
+#include <stdlib.h> // printf
 #include <ctype.h>  // isdigit
 #include "models.h"
 
 #define PI 3.14159265
 
-#define S 21
-#define P 7
-#define H 10
-#define SIGMA 6
+// NLM-Naive
+#define NLM_NAIVE_S 21
+#define NLM_NAIVE_P 7
+#define NLM_NAIVE_H 9
+#define NLM_NAIVE_SIGMA 6
+
+// NLM-Mean
+#define NLM_MEAN_P1 3
+#define NLM_MEAN_P2 5
+#define NLM_MEAN_P3 7
+#define NLM_MEAN_S  21
+#define NLM_MEAN_A1 20
+#define NLM_MEAN_A2 20
+#define NLM_MEAN_A3 20
+#define NLM_MEAN_SIGMA 6
 
 #define WIN_MODIFIED "Modified"
 #define WIN_ORIGINAL "Original"
@@ -39,39 +52,6 @@ typedef struct _options
     float var;
 } options;
 
-IplImage* si(IplImage *img)
-{
-    IplImage *ret = cvCreateImage(cvSize(img->width,
-                                     img->height),
-                                     img->depth,
-                                     img->nChannels);
-
-    int x,y;
-    BwImage i(img);
-    BwImage j(ret);
-
-    j[0][0] = i[0][0];
-
-    for(x = 1; x < img->width; ++x)
-    {
-        j[0][x] = j[0][x-1] + i[0][x];
-    }
-
-    for(y = 1; y < img->height; ++y)
-    {
-        j[y][0] = j[y-1][0] + i[y][0];
-    }
-
-    for(y = 1; y < img->height; ++y)
-    {
-        for(x = 1; x < img->width; ++x)
-        {
-            j[y][x] = j[y][x-1] + j[y-1][x] - j[y-1][x-1] + i[y][x];
-        }
-    }
-
-    return ret;
-}
 
 CvMat *cvGaussianKernel(int n, float sigma)
 {
@@ -150,89 +130,275 @@ void cvGetSubImage(IplImage* img, IplImage* subImg, CvRect roiRect)
 void nlm_naive(IplImage *original, IplImage *output)
 {
     // Create a Guassian Kernel that is the same size as the patch
-    static CvMat *kernel = cvGaussianKernel(P, SIGMA);
+    static CvMat *kernel = cvGaussianKernel(NLM_NAIVE_P, NLM_NAIVE_SIGMA);
 
     // Create patches and search windows
-    static IplImage *i_patch  = cvCreateImage(cvSize(P, P), IPL_DEPTH_8U, 1),
-             *j_patch  = cvCreateImage(cvSize(P, P), IPL_DEPTH_8U, 1);
+    static IplImage *i_patch = cvCreateImage(cvSize(NLM_NAIVE_P, NLM_NAIVE_P), IPL_DEPTH_8U, 1),
+                    *j_patch = cvCreateImage(cvSize(NLM_NAIVE_P, NLM_NAIVE_P), IPL_DEPTH_8U, 1);
 
 
-    // Prepare for convolution
-    static IplImage *padded = cvCreateImage(cvSize(original->width+S+P,
-                                     original->height+S+P),
+    // NLM_NAIVE_Prepare for convolution
+    static IplImage *padded = cvCreateImage(cvSize(original->width+NLM_NAIVE_S+NLM_NAIVE_P,
+                                     original->height+NLM_NAIVE_S+NLM_NAIVE_P),
                                      original->depth,
                                      original->nChannels);
              
 
-    static CvMat *weight = cvCreateMat(S, S, CV_32FC1);
+    static CvMat *weight = cvCreateMat(NLM_NAIVE_S, NLM_NAIVE_S, CV_32FC1);
 
     // Pad borders for convolution
-    CvPoint offset = cvPoint((S+P-1)/2,(S+P-1)/2);
+    CvPoint offset = cvPoint((NLM_NAIVE_S+NLM_NAIVE_P-1)/2,(NLM_NAIVE_S+NLM_NAIVE_P-1)/2);
     cvCopyMakeBorder(original, padded, offset, IPL_BORDER_REPLICATE, cvScalarAll(0));
 
 
     BwImage u(output);
     BwImage f(padded);
 
-    int x0 = (P+S)/2, xn = padded->width  - (P+S)/2,
-        y0 = (P+S)/2, yn = padded->height - (P+S)/2,
+    int x0 = (NLM_NAIVE_P+NLM_NAIVE_S)/2, xn = padded->width  - (NLM_NAIVE_P+NLM_NAIVE_S)/2,
+        y0 = (NLM_NAIVE_P+NLM_NAIVE_S)/2, yn = padded->height - (NLM_NAIVE_P+NLM_NAIVE_S)/2,
         sx, sy;
 
     float f_x=0.0,
           c_x=0.0,
           tmp=0.0;
 
-    for(y0 = (P+S)/2; y0 < yn; ++y0)
+    for(y0 = (NLM_NAIVE_P+NLM_NAIVE_S)/2; y0 < yn; ++y0)
     {
-        for(x0 = (P+S)/2; x0 < xn; ++x0)
+        for(x0 = (NLM_NAIVE_P+NLM_NAIVE_S)/2; x0 < xn; ++x0)
         {
             f_x = 0.0;
             c_x = 0.0;
 
             // Save patch around current pixel
-            cvGetSubImage(padded, i_patch, cvRect(x0-P/2, y0-P/2, P, P));
+            cvGetSubImage(padded, i_patch, cvRect(x0-NLM_NAIVE_P/2, y0-NLM_NAIVE_P/2, NLM_NAIVE_P, NLM_NAIVE_P));
             
             // Determine weighted distance for each patch as well as normalized constant
-            for(sy = y0-S/2; sy < y0+S/2+1; ++sy)
+            for(sy = y0-NLM_NAIVE_S/2; sy < y0+NLM_NAIVE_S/2+1; ++sy)
             {
-                for(sx = x0-S/2; sx < x0+S/2+1; ++sx)
+                for(sx = x0-NLM_NAIVE_S/2; sx < x0+NLM_NAIVE_S/2+1; ++sx)
                 {
                     // Save patch around current iteration in the search window
-                    cvGetSubImage(padded, j_patch, cvRect(sx-P/2, sy-P/2, P, P));
+                    cvGetSubImage(padded, j_patch, cvRect(sx-NLM_NAIVE_P/2, sy-NLM_NAIVE_P/2, NLM_NAIVE_P, NLM_NAIVE_P));
 
-                    cvmSet(weight, sy+S/2-y0, sx+S/2-x0, exp(-cvGaussianWeightedDistance(kernel, i_patch, j_patch)/(H*H)));
-                    c_x += cvmGet(weight, sy+S/2-y0, sx+S/2-x0);
+                    cvmSet(weight, sy+NLM_NAIVE_S/2-y0, sx+NLM_NAIVE_S/2-x0,
+                        exp(-cvGaussianWeightedDistance(kernel, i_patch, j_patch)/
+                        (NLM_NAIVE_H*NLM_NAIVE_H)));
+                    c_x += cvmGet(weight, sy+NLM_NAIVE_S/2-y0, sx+NLM_NAIVE_S/2-x0);
                 }
             }
 
-            for(sy = y0-S/2; sy < y0+S/2+1; ++sy)
+            for(sy = y0-NLM_NAIVE_S/2; sy < y0+NLM_NAIVE_S/2+1; ++sy)
             {
-                for(sx = x0-S/2; sx < x0+S/2+1; ++sx)
+                for(sx = x0-NLM_NAIVE_S/2; sx < x0+NLM_NAIVE_S/2+1; ++sx)
                 {
-                    tmp = cvmGet(weight, sy+S/2-y0, sx+S/2-x0) * f[sy][sx];
+                    tmp = cvmGet(weight, sy+NLM_NAIVE_S/2-y0, sx+NLM_NAIVE_S/2-x0) * f[sy][sx];
                     f_x += tmp;
                 }
             }
-            u[y0-(P+S)/2][x0-(P+S)/2] = (int)f_x/c_x;
+            u[y0-(NLM_NAIVE_P+NLM_NAIVE_S)/2][x0-(NLM_NAIVE_P+NLM_NAIVE_S)/2] = (int)f_x/c_x;
         }
     }
 }
 
-float strToFloat(string s)
+/*
+IplImage *si(IplImage *img)
 {
-    std::istringstream iss(s);
-    float f;
-    iss >> noskipws >> f; // noskipws considers leading whitespace invalid
-    return f;
+    IplImage *ret = cvCreateImage(cvSize(img->width,
+                                         img->height),
+                                  IPL_DEPTH_64F,
+                                  img->nChannels);
+
+    int x,y;
+    BwImage i(img);
+    BwImageDouble j(ret);
+
+    j[0][0] = i[0][0];
+
+    for(x = 1; x < img->width; ++x)
+    {
+        j[0][x] = j[0][x-1] + i[0][x];
+        //printf("j[0][%d]=j[0][%d]+(i[0][%d]=%d)=%f\n",x,x-1,x,i[0][x],j[0][x]);
+    }
+
+    for(y = 1; y < img->height; ++y)
+    {
+        j[y][0] = j[y-1][0] + i[y][0];
+    }
+
+    for(y = 1; y < img->height; ++y)
+    {
+        for(x = 1; x < img->width; ++x)
+        {
+            j[y][x] = j[y][x-1] + j[y-1][x] - j[y-1][x-1] + i[y][x];
+            //printf("j[0][%d]=j[0][%d]+(i[0][%d]=%d)=%f\n",x,x-1,x,i[0][x],j[y][x]);
+        }
+    }
+
+    return ret;
+}
+*/
+
+template<class T>
+T si_sum(Image<T> img, int y, int x, int w)
+{
+    int d = w/2;
+    x += d;
+    y += d;
+    //printf("Dim: %d\n", d);
+    double t = img[y+1][x+1] - img[y+1][x-w] - img[y-w][x+1] + img[y-w][x-w];
+    //printf("%d=>%d@(%dx%d): %f-%f-%f+%f=%f\n",
+    //w,d,x,y,img[y+1][x+1],img[y+1][x-w],img[y-w][x+1],img[y-w][x-w],t);
+
+    //printf("(%dx%d):%f-%f-%f+%f=%f\n", y,x,img[y][x], img[y][x-w+1],
+    //img[y-w+1][x], 2*img[y-w+1][x-w+1], t);
+    return t;
 }
 
-bool isFloat(string s)
+
+void nlm_mean(IplImage *original, IplImage *output)
 {
-    std::istringstream iss(s);
-    float f;
-    iss >> noskipws >> f; // noskipws considers leading whitespace invalid
-    // Check the entire string was consumed and if either failbit or badbit is set
-    return iss.eof() && !iss.fail(); 
+    //BwImage o(original);
+    BwImage u(output);
+
+    static CvMat *kernel1 = cvGaussianKernel(NLM_MEAN_P1, NLM_MEAN_SIGMA);
+    static CvMat *kernel2 = cvGaussianKernel(NLM_MEAN_P2, NLM_MEAN_SIGMA);
+    static CvMat *kernel3 = cvGaussianKernel(NLM_MEAN_P3, NLM_MEAN_SIGMA);
+
+    // Pad for largest kernel matrix
+    static IplImage *padded = cvCreateImage(cvSize(original->width  + NLM_MEAN_S + NLM_MEAN_P3,
+                                                   original->height + NLM_MEAN_S + NLM_MEAN_P3),
+                                            original->depth,
+                                            original->nChannels);
+
+    static CvMat *weight = cvCreateMat(NLM_MEAN_S, NLM_MEAN_S, CV_32FC1);
+
+    // Center the original in the padded image
+    CvPoint offset = cvPoint((NLM_MEAN_S + NLM_MEAN_P3 - 1)/2, (NLM_MEAN_S + NLM_MEAN_P3 - 1)/2);
+    cvCopyMakeBorder(original, padded, offset, IPL_BORDER_CONSTANT, cvScalarAll(0));
+
+    //IplImage *si_matrix = si(padded);
+    BwImage o(padded);
+
+
+    IplImage *si_matrix = cvCreateImage(cvSize(padded->width+1,
+                                               padded->height+1),
+                                        IPL_DEPTH_64F,
+                                        padded->nChannels);
+    cvIntegral(padded, si_matrix);
+    BwImageDouble s(si_matrix);
+
+    //BwImage p(padded);
+
+    CvScalar _g1 = cvAvg(kernel1),
+             _g2 = cvAvg(kernel2),
+             _g3 = cvAvg(kernel3);
+
+    double z,
+           s1, s2, s3,
+           g1 = _g1.val[0],
+           g2 = _g2.val[0],
+           g3 = _g3.val[0],
+           f_x;
+
+    //printf("g1 = %f; g2 = %f; g3 = %f\n", g1, g2, g3);
+
+    int y0 = (NLM_MEAN_P3 + NLM_MEAN_S)/2,
+        x0 = y0,
+
+        yn = padded->height - (NLM_MEAN_P3 + NLM_MEAN_S)/2,
+        xn = padded->width  - (NLM_MEAN_P3 + NLM_MEAN_S)/2,
+        
+        y, x;
+
+    int sy,
+        sx,
+
+        syn,
+        sxn;
+        
+
+    // Iterate over image
+    for(y = (NLM_MEAN_P3 + NLM_MEAN_S)/2; y < padded->height - (NLM_MEAN_P3 + NLM_MEAN_S)/2; ++y)
+    {
+        for(x = (NLM_MEAN_P3 + NLM_MEAN_S)/2; x < padded->width - (NLM_MEAN_P3 + NLM_MEAN_S)/2; ++x)
+        {
+
+            sy = y - NLM_MEAN_S/2;
+
+            syn = y + NLM_MEAN_S/2 + 1;
+            sxn = x + NLM_MEAN_S/2 + 1;
+
+            // the sum of the weights for the current search window
+            z = 0.0;
+
+            // Iterate over search window
+            for(;sy < syn; ++sy)
+            {
+                sx = x - NLM_MEAN_S/2;
+                for(;sx < sxn; ++sx)
+                {
+                    s1 = exp(-g1*pow(si_sum(s, y, x, NLM_MEAN_P1) -
+                                    (si_sum(s, sy, sx, NLM_MEAN_P1)), 2)/(NLM_MEAN_A1*NLM_MEAN_SIGMA*NLM_MEAN_SIGMA));
+                    s2 = exp(-g2*pow(si_sum(s, y, x, NLM_MEAN_P2) -
+                                    (si_sum(s, sy, sx, NLM_MEAN_P2)), 2)/(NLM_MEAN_A2*NLM_MEAN_SIGMA*NLM_MEAN_SIGMA));
+                    s3 = exp(-g3*pow(si_sum(s, y, x, NLM_MEAN_P3) -
+                                    (si_sum(s, sy, sx, NLM_MEAN_P3)), 2)/(NLM_MEAN_A3*NLM_MEAN_SIGMA*NLM_MEAN_SIGMA));
+
+                    z += s1 + s2 + s3;
+                    
+                    cvmSet(weight, sy+NLM_MEAN_S/2-y, sx+NLM_MEAN_S/2-x, s1 + s2 + s3);
+                }
+            }
+            //printf("%dx%d\n", y, x);
+
+            f_x = 0.0;
+            for(sy = y-NLM_MEAN_S/2; sy < y+NLM_MEAN_S/2+1; ++sy)
+            {
+                for(sx = x-NLM_MEAN_S/2; sx < x+NLM_MEAN_S/2+1; ++sx)
+                {
+                    f_x += cvmGet(weight, sy+NLM_MEAN_S/2-y, sx+NLM_MEAN_S/2-x) * o[sy][sx];
+                }
+            }
+            u[y-(NLM_MEAN_P3+NLM_MEAN_S)/2][x-(NLM_MEAN_P3+NLM_MEAN_S)/2] = (int)f_x/z;
+            //printf("Setting:%d,%d = %f/%f = %d\n", y-(NLM_MEAN_P3+NLM_MEAN_S)/2,
+            //x-(NLM_MEAN_P3+NLM_MEAN_S)/2, f_x, z, (int)f_x/z);
+        }
+    }
+
+
+
+
+    //printf("j[0][0] = %d\n", s[0][0]);
+    //int x, y;
+    /*
+    for(y = 0; y < NLM_MEAN_S+1; ++y)
+    {
+        for(x = 0; x < NLM_MEAN_S+1; ++x)
+        {
+            printf("%04d ", (int)s[y][x]);
+        }
+        cout << endl;
+    }
+
+    cout << endl << endl;
+
+    for(y = 0; y < NLM_MEAN_S+1; ++y)
+    {
+        for(x = 0; x < NLM_MEAN_S+1; ++x)
+        {
+            printf("%04d ", p[y][x]);
+        }
+        cout << endl;
+    }
+
+    printf("%f\n", si_sum(s, 13, 13, 1));
+    getchar();
+    */
+
+
+    //printf("o[-1][-1]: %f\n", s[si_matrix->height-1][si_matrix->width-1]);
+
+
 }
 
 void addGaussianNoise(IplImage *image_in, IplImage *image_out, double mean, double var)
@@ -313,6 +479,10 @@ IplImage* process_image(IplImage *f, IplImage *u, options opt)
     else if(opt.method == "nlm-naive")
     {
         nlm_naive(f, u);
+    }
+    else if(opt.method == "nlm-mean")
+    {
+        nlm_mean(f, u);
     }
 
     return u;
@@ -441,25 +611,6 @@ bool process_video_file(const string s1, const string s2, options opt)
     return true;
 }
 
-void print_options(void)
-{
-    puts("Syntax: ./program file.(jpg|png|pgm|etc)");
-}
-
-bool is_valid_option(const char* haystack[], const char* needle)
-{
-    const char** current = haystack;
-    while(*current != NULL)
-    {
-        if(strcmp(needle, *current) == 0)
-        {
-            return true;
-        }
-        ++current;
-    }
-    return false;
-}
-
 int main(int argc, char **argv)
 {
     string src,
@@ -493,8 +644,7 @@ int main(int argc, char **argv)
         //_allowed.push_back("nlm-conv");
         ValuesConstraint<string> _allowedMethods(_allowed);
 
-        ValueArg<string> _method("m", "method", "Method to use on image/video",
-        false, "noise", &_allowedMethods);
+        ValueArg<string> _method("m", "method", "Method to use on image/video", false, "noise", &_allowedMethods);
         cmd.add(_method);
 
         cmd.parse(argc, argv);
@@ -534,7 +684,7 @@ int main(int argc, char **argv)
             if(!process_video_file(src, dst, opt))
             {
                 puts("Failed to process as video. File must be corrupt "
-                     "or uses and unsupported format.");
+                     "or uses an unsupported format.");
             }
         }
 

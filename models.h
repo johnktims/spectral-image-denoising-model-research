@@ -35,6 +35,7 @@ typedef Image<RgbPixel>       RgbImage;
 typedef Image<RgbPixelFloat>  RgbImageFloat;
 typedef Image<unsigned char>  BwImage;
 typedef Image<float>          BwImageFloat;
+typedef Image<double>         BwImageDouble;
 
 void non_convex(IplImage*, IplImage*, int);
 
