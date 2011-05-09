@@ -340,9 +340,8 @@ T si_sum(Image<T> img, int y, int x, int w)
  ****************************************************************************/
 void nlm_mean(IplImage *original, IplImage *output)
 {
-    //BwImage o(original);
-    BwImage u(output);
 
+    // Declare kernels
     static CvMat *kernel1 = cvGaussianKernel(NLM_MEAN_P1, NLM_MEAN_SIGMA);
     static CvMat *kernel2 = cvGaussianKernel(NLM_MEAN_P2, NLM_MEAN_SIGMA);
     static CvMat *kernel3 = cvGaussianKernel(NLM_MEAN_P3, NLM_MEAN_SIGMA);
@@ -353,25 +352,28 @@ void nlm_mean(IplImage *original, IplImage *output)
                                             original->depth,
                                             original->nChannels);
 
+    // Create weight matrix
     static CvMat *weight = cvCreateMat(NLM_MEAN_S, NLM_MEAN_S, CV_32FC1);
 
     // Center the original in the padded image
     CvPoint offset = cvPoint((NLM_MEAN_S + NLM_MEAN_P3 - 1)/2, (NLM_MEAN_S + NLM_MEAN_P3 - 1)/2);
     cvCopyMakeBorder(original, padded, offset, IPL_BORDER_CONSTANT, cvScalarAll(0));
 
-    //IplImage *si_matrix = si(padded);
-    BwImage o(padded);
-
-
+    // Create N+1 x M+1 matrix for Integral Image(SI)
     IplImage *si_matrix = cvCreateImage(cvSize(padded->width+1,
                                                padded->height+1),
                                         IPL_DEPTH_64F,
                                         padded->nChannels);
+
+    // Calculate Integral Image matrix
     cvIntegral(padded, si_matrix);
+
+    // Set up easy matrix access
+    BwImage u(output);
+    BwImage o(padded);
     BwImageDouble s(si_matrix);
 
-    //BwImage p(padded);
-
+    // Average kernel matrices
     CvScalar _g1 = cvAvg(kernel1),
              _g2 = cvAvg(kernel2),
              _g3 = cvAvg(kernel3);
@@ -393,26 +395,32 @@ void nlm_mean(IplImage *original, IplImage *output)
         
         y, x;
 
-    int sy,
+    int sp,
+        sy,
         sx,
-
         syn,
-        sxn;
+        sxn,
         
+        p1,
+        p2,
+        p3;
 
     // Iterate over image
-    for(y = (NLM_MEAN_P3 + NLM_MEAN_S)/2; y < padded->height - (NLM_MEAN_P3 + NLM_MEAN_S)/2; ++y)
+    for(y = y0; y < yn; ++y)
     {
-        for(x = (NLM_MEAN_P3 + NLM_MEAN_S)/2; x < padded->width - (NLM_MEAN_P3 + NLM_MEAN_S)/2; ++x)
+        for(x = x0; x < xn; ++x)
         {
-
-            sy = y - NLM_MEAN_S/2;
-
+            sy  = y - NLM_MEAN_S/2;
             syn = y + NLM_MEAN_S/2 + 1;
             sxn = x + NLM_MEAN_S/2 + 1;
 
             // the sum of the weights for the current search window
             z = 0.0;
+
+            // Compute rectangle for current neighborhood
+            p1 = si_sum(s, y, x, NLM_MEAN_P1);
+            p2 = si_sum(s, y, x, NLM_MEAN_P2);
+            p3 = si_sum(s, y, x, NLM_MEAN_P3);
 
             // Iterate over search window
             for(;sy < syn; ++sy)
@@ -420,19 +428,23 @@ void nlm_mean(IplImage *original, IplImage *output)
                 sx = x - NLM_MEAN_S/2;
                 for(;sx < sxn; ++sx)
                 {
-                    s1 = exp(-g1*pow(si_sum(s, y, x, NLM_MEAN_P1) -
-                                    (si_sum(s, sy, sx, NLM_MEAN_P1)), 2)/(NLM_MEAN_A1*NLM_MEAN_SIGMA*NLM_MEAN_SIGMA));
-                    s2 = exp(-g2*pow(si_sum(s, y, x, NLM_MEAN_P2) -
-                                    (si_sum(s, sy, sx, NLM_MEAN_P2)), 2)/(NLM_MEAN_A2*NLM_MEAN_SIGMA*NLM_MEAN_SIGMA));
-                    s3 = exp(-g3*pow(si_sum(s, y, x, NLM_MEAN_P3) -
-                                    (si_sum(s, sy, sx, NLM_MEAN_P3)), 2)/(NLM_MEAN_A3*NLM_MEAN_SIGMA*NLM_MEAN_SIGMA));
+                    sp = p1 - si_sum(s, sy, sx, NLM_MEAN_P1);
+                    sp *= sp;
+                    s1 = exp(-g1*sp/(NLM_MEAN_A1*NLM_MEAN_SIGMA*NLM_MEAN_SIGMA));
+
+                    sp = p2 - si_sum(s, sy, sx, NLM_MEAN_P2);
+                    sp *= sp;
+                    s2 = exp(-g2*sp/(NLM_MEAN_A2*NLM_MEAN_SIGMA*NLM_MEAN_SIGMA));
+
+                    sp = p3 - si_sum(s, sy, sx, NLM_MEAN_P3);
+                    sp *= sp;
+                    s3 = exp(-g3*sp/(NLM_MEAN_A3*NLM_MEAN_SIGMA*NLM_MEAN_SIGMA));
 
                     z += s1 + s2 + s3;
                     
                     cvmSet(weight, sy+NLM_MEAN_S/2-y, sx+NLM_MEAN_S/2-x, s1 + s2 + s3);
                 }
             }
-            //printf("%dx%d\n", y, x);
 
             f_x = 0.0;
             for(sy = y-NLM_MEAN_S/2; sy < y+NLM_MEAN_S/2+1; ++sy)
@@ -442,46 +454,10 @@ void nlm_mean(IplImage *original, IplImage *output)
                     f_x += cvmGet(weight, sy+NLM_MEAN_S/2-y, sx+NLM_MEAN_S/2-x) * o[sy][sx];
                 }
             }
+
             u[y-(NLM_MEAN_P3+NLM_MEAN_S)/2][x-(NLM_MEAN_P3+NLM_MEAN_S)/2] = (int)f_x/z;
-            //printf("Setting:%d,%d = %f/%f = %d\n", y-(NLM_MEAN_P3+NLM_MEAN_S)/2,
-            //x-(NLM_MEAN_P3+NLM_MEAN_S)/2, f_x, z, (int)f_x/z);
         }
     }
-
-
-
-
-    //printf("j[0][0] = %d\n", s[0][0]);
-    //int x, y;
-    /*
-    for(y = 0; y < NLM_MEAN_S+1; ++y)
-    {
-        for(x = 0; x < NLM_MEAN_S+1; ++x)
-        {
-            printf("%04d ", (int)s[y][x]);
-        }
-        cout << endl;
-    }
-
-    cout << endl << endl;
-
-    for(y = 0; y < NLM_MEAN_S+1; ++y)
-    {
-        for(x = 0; x < NLM_MEAN_S+1; ++x)
-        {
-            printf("%04d ", p[y][x]);
-        }
-        cout << endl;
-    }
-
-    printf("%f\n", si_sum(s, 13, 13, 1));
-    getchar();
-    */
-
-
-    //printf("o[-1][-1]: %f\n", s[si_matrix->height-1][si_matrix->width-1]);
-
-
 }
 
 
