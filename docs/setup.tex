@@ -1,0 +1,61 @@
+\documentclass{article}
+\begin{document}
+\section{Setting up the Environment on Ubuntu}
+Install the OpenCV, TCLAP, and Git packages:
+\begin{enumerate}
+\item
+sudo apt-get install 
+    libcv-dev
+    libcv2.1
+    libcvaux-dev
+    libcvaux2.1
+    libhighgui-dev
+    libhighgui2.1
+    libtclap-dev
+    git -y
+\end{enumerate}
+
+\section{Downloading the Code}
+\begin{enumerate}
+\item \emph{mkdir code}
+\item \emph{cd code}
+\item \emph{git init}
+\item \emph{git remote add origin git://github.com/missionpilot/foxglove.git}
+\item \emph{git pull origin master}
+\end{enumerate}
+
+\section{Compiling the Code}
+\begin{enumerate}
+\item Change to the \emph{code} directory and run \emph{make}
+\item If changes have been made to the code, run \emph{make clean}
+      before running \emph{make} again.
+\end{enumerate}
+
+\section{Executing the Program}
+Executing \emph{./main -{}-help} or \emph{./main -h} will provide an exhaustive
+list of arguments and default parameters. The only required parameter is the
+input file\footnote{A file can either be an image or an AVI.}.
+
+\section{Examples}
+\begin{enumerate}
+\item
+    Add Additive White Gaussian Noise(zero-mean) with standard deviation of
+    0.1 to a file and then save the output as a JPEG.
+    \begin{enumerate}
+        \item[] \emph{./main data/lena\_512.png data/lena\_512\_noise.jpg -v 0.1}
+    \end{enumerate}
+\item
+    Run 50 iterations of Non-Convex model, and apply noise on-the-fly to a
+    clean file before displaying output in a window instead of saving to a
+    file.
+    \begin{enumerate}
+        \item[] \emph{./main data/lena\_512.png -n -v 0.1 -m non-convex -i 50}
+    \end{enumerate}
+\item
+    Run Buades' version of the Non-Local Mean method.
+    \begin{enumerate}
+        \item[] \emph{./main data/lena\_128.png -m nlm-naive -n
+        }
+    \end{enumerate}
+\end{enumerate}
+\end{document}
