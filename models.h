@@ -12,9 +12,10 @@
 #include "highgui.h"
 #endif
 
+
 typedef struct _options
 {
-    string method;
+    std::string method;
     int iterations;
     float var;
 } options;
