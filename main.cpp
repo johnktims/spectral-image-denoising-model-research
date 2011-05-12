@@ -112,7 +112,7 @@ int main(int argc, char **argv)
 
         if(!process_image_file(src, dst, opt))
         {
-            puts("Failed to processes as an image. Assume video....");
+            puts("Failed to process as an image. Assume video....");
             if(!process_video_file(src, dst, opt))
             {
                 puts("Failed to process as video. File must be corrupt "
