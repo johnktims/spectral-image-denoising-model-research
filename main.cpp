@@ -172,9 +172,10 @@ IplImage* process_image(IplImage *f, IplImage *u, options opt)
         cvCopy(u, f);
     }
 
+    cvCopy(f, u, NULL);
+
     if(opt.method == "non-convex")
     {
-        cvCopy(f, u, NULL);
         non_convex(f, u, opt.iterations);
     }
     else if(opt.method == "nlm-naive")
@@ -227,6 +228,9 @@ bool process_image_file(const string s1, const string s2, options opt)
         cvShowImage(WIN_MODIFIED, u);
         cvShowImage(WIN_ORIGINAL, f);
     }
+
+    cvReleaseImage(&f);
+    cvReleaseImage(&u);
 
     return true;
 }
@@ -316,6 +320,10 @@ bool process_video_file(const string s1, const string s2, options opt)
             cvShowImage(WIN_ORIGINAL, f);
         }
     }
+
+    cvReleaseImage(&f);
+    cvReleaseImage(&u);
+
     cvReleaseVideoWriter(&writer);
     cvReleaseCapture(&capture);
 
