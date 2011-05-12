@@ -18,6 +18,7 @@ typedef struct _options
     std::string method;
     int iterations;
     float var;
+    bool add_noise;
 } options;
 
 template<class T> class Image

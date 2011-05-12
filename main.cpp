@@ -53,8 +53,12 @@ int main(int argc, char **argv)
         cmd.add(_dst);
 
         // The variance of the gaussian distribution used when applying noise
-        ValueArg<float> _var("n", "variance", "Variance for zero-mean noise", false, 0.01, "float");
+        ValueArg<float> _var("v", "variance", "Variance for zero-mean noise", false, 0.01, "float");
         cmd.add(_var);
+
+        // Add noise with the variance specified by --variance
+        SwitchArg _noise("n", "noise", "Apply noise to input with the variance set by --variance", false);
+        cmd.add(_noise);
 
         // The number of iterations for the non-convex method.
         ValueArg<int> _itr("i", "iterations", "Iterations for non-convex method", false, 10, "int");
@@ -91,6 +95,7 @@ int main(int argc, char **argv)
         opt.var = var;
         opt.method = method;
         opt.iterations = itr;
+        opt.add_noise = _noise.isSet() || method == "noise";
 
         /*
          * If a destination hasn't been specified,
@@ -161,14 +166,16 @@ void overlay_psnr(IplImage *f, IplImage *u)
 IplImage* process_image(IplImage *f, IplImage *u, options opt)
 {
 
+    if(opt.add_noise)
+    {
+        addGaussianNoise(f, u, 0, opt.var);
+        cvCopy(u, f);
+    }
+
     if(opt.method == "non-convex")
     {
         cvCopy(f, u, NULL);
         non_convex(f, u, opt.iterations);
-    }
-    else if(opt.method == "noise")
-    {
-        addGaussianNoise(f, u, 0, opt.var);
     }
     else if(opt.method == "nlm-naive")
     {
