@@ -10,6 +10,7 @@
 #endif
 
 #include <iostream>
+#include <fstream>
 #include <tclap/CmdLine.h>
 
 #include "models.h"
@@ -25,6 +26,7 @@ using namespace cv;
 void overlay_psnr(IplImage*, IplImage*);
 
 // Declare image and video processing functions
+bool file_exists(const string);
 bool process_image_file(const string, const string, options);
 bool process_video_file(const string, const string, options);
 IplImage* process_image(IplImage*, IplImage*, options);
@@ -97,6 +99,12 @@ int main(int argc, char **argv)
         opt.iterations = itr;
         opt.add_noise = _noise.isSet() || method == "noise";
 
+        // Make sure that the supplied source file exists
+        if(!file_exists(src))
+        {
+            throw(CmdLineParseException("Path to source file is invalid."));
+        }
+
         /*
          * If a destination hasn't been specified,
          * show the results in windows.
@@ -134,11 +142,23 @@ int main(int argc, char **argv)
 	}
     catch (ArgException &e)  // catch any exceptions
 	{
-        cerr << "error: " << e.error() << " for arg " << e.argId() << endl;
+        cerr << "error: " << e.error() << endl;
     }
 
     return 0;
 }
+
+
+/****************************************************************************
+ * @brief Check to see if the given file exists
+ * @note  Although this isn't the most efficient method, it is probably the
+ *        most portable.
+ ****************************************************************************/
+ bool file_exists(const string path)
+ {
+    ifstream fp(path.c_str());
+    return fp;
+ }
 
 
 /****************************************************************************
