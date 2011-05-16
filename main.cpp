@@ -169,12 +169,14 @@ void overlay_psnr(IplImage *f, IplImage *u)
     CvFont font;
     double hScale = 1;
     double vScale = 1;
-    int lineWidth = 1;
+    int lineWidth = 2;
     char buffer[35];
     sprintf(buffer, "PSNR:%f", psnr(f, u));
 
-    cvInitFont(&font, CV_FONT_HERSHEY_PLAIN, hScale, vScale, 0, lineWidth);
+    cvInitFont(&font, CV_FONT_HERSHEY_PLAIN, hScale, vScale, 0, lineWidth+1);
+    cvPutText (u, buffer, cvPoint(10, 20), &font, cvScalar(0, 0, 0));
 
+    cvInitFont(&font, CV_FONT_HERSHEY_PLAIN, hScale, vScale, 0, lineWidth-1);
     cvPutText (u, buffer, cvPoint(10, 20), &font, cvScalar(255, 255, 255));
 }
 
