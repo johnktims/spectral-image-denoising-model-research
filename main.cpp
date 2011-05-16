@@ -169,10 +169,15 @@ IplImage* process_image(IplImage *f, IplImage *u, options opt)
     if(opt.add_noise)
     {
         addGaussianNoise(f, u, 0, opt.var);
-        cvCopy(u, f);
+        if(opt.method != "noise")
+        {
+            cvCopy(u, f);
+        }
     }
-
-    cvCopy(f, u, NULL);
+    else
+    {
+        cvCopy(f, u, NULL);
+    }
 
     if(opt.method == "non-convex")
     {
