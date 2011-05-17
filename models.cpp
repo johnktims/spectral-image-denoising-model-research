@@ -43,17 +43,18 @@ double psnr(IplImage *original, IplImage *output)
     int x,y,
         cols = original->width,
         rows = original->height;
-    double numerator   = log10(cols*rows)+log10(255*255),
-           denominator = 0;
 
-    for(x = 0; x < cols; ++x)
+    double mse = 0.0;
+    for(y = 0; y < rows; ++y)
     {
-        for(y = 0; y < rows; ++y)
+        for(x = 0; x < cols; ++x)
         {
-            denominator += pow(f[x][y] - u[x][y], 2);
+            mse += pow(f[y][x] - u[y][x], 2);
         }
     }
-    return 10*(numerator-log10(denominator));
+    mse /= cols * rows * 1.0;
+
+    return 10*log10(255.0 * 255.0 / mse);
 }
 
 
@@ -62,7 +63,7 @@ double psnr(IplImage *original, IplImage *output)
  ****************************************************************************/
 void non_convex(IplImage* f_t, IplImage* un_t, int N)
 {
-    IplImage* u_t = cvCreateImage(cvSize(f_t->width, f_t->height), f_t->depth, f_t->nChannels);
+    IplImage* u_t = cvCreateImage(cvGetSize(f_t), f_t->depth, f_t->nChannels);
     
     BwImage u(u_t);
     BwImage f(f_t);
@@ -181,7 +182,7 @@ CvMat *cvGaussianKernel(int n, float sigma)
         }
     }
 
-    // Normalize kernel (seems to break output???)
+    // It is unnecessary to normalize the kernel
     /*
     for(y = -mid; y <= mid; ++y)
     {
@@ -347,7 +348,7 @@ void nlm_mean(IplImage *original, IplImage *output)
     static CvMat *kernel3 = cvGaussianKernel(NLM_MEAN_P3, NLM_MEAN_SIGMA);
 
     // Pad for largest kernel matrix
-    static IplImage *padded = cvCreateImage(cvSize(original->width  + NLM_MEAN_S + NLM_MEAN_P3,
+    static IplImage *padded = cvCreateImage(cvSize(original->width + NLM_MEAN_S + NLM_MEAN_P3,
                                                    original->height + NLM_MEAN_S + NLM_MEAN_P3),
                                             original->depth,
                                             original->nChannels);

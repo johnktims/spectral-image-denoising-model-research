@@ -187,19 +187,14 @@ void overlay_psnr(IplImage *f, IplImage *u)
  ****************************************************************************/
 IplImage* process_image(IplImage *f, IplImage *u, options opt)
 {
-
-    if(opt.add_noise)
+    // Assume we're always getting a clear image as input
+    // and adding noise to it.
+    addGaussianNoise(f, u, 0, opt.var);
+    if(opt.method != "noise")
     {
-        addGaussianNoise(f, u, 0, opt.var);
-        if(opt.method != "noise")
-        {
-            cvCopy(u, f);
-        }
+        cvCopy(u, f);
     }
-    else
-    {
-        cvCopy(f, u, NULL);
-    }
+    cvCopy(f, u, NULL);
 
     if(opt.method == "non-convex")
     {
@@ -231,13 +226,15 @@ bool process_image_file(const string s1, const string s2, options opt)
         return false;
     }
 
-    IplImage *f = cvCreateImage(cvSize(t->width, t->height),IPL_DEPTH_8U, 1),
-             *u = cvCreateImage(cvSize(t->width, t->height),IPL_DEPTH_8U, 1);
+    IplImage *f = cvCreateImage(cvGetSize(t),IPL_DEPTH_8U, 1),
+             *u = cvCreateImage(cvGetSize(t),IPL_DEPTH_8U, 1),
+             *o = NULL;
     cvConvertImage(t, f, 0);
+    o = cvCloneImage(f);
 
     bool save = !s2.empty();
 
-    if(!(f || u))
+    if(!(f || u || o))
     {
         return false;
     }
@@ -246,18 +243,23 @@ bool process_image_file(const string s1, const string s2, options opt)
 
     if(save)
     {
-        printf("PSNR: %f\n", psnr(f, u));
+        printf("Original PSNR: %f\n", psnr(o, f));
+        printf("Modified PSNR: %f\n", psnr(o, u));
+
         cvSaveImage(s2.c_str(), u);
     }
     else
     {
-        overlay_psnr(f, u);
-        cvShowImage(WIN_MODIFIED, u);
+        overlay_psnr(o, f);
         cvShowImage(WIN_ORIGINAL, f);
+
+        overlay_psnr(o, u);
+        cvShowImage(WIN_MODIFIED, u);
     }
 
     cvReleaseImage(&f);
     cvReleaseImage(&u);
+    cvReleaseImage(&o);
 
     return true;
 }
@@ -292,7 +294,8 @@ bool process_video_file(const string s1, const string s2, options opt)
     IplImage *t = NULL,
              *p = NULL,
              *f = NULL,
-             *u = NULL;
+             *u = NULL,
+             *o = NULL;
 
     bool first = true;
     while(1)
@@ -306,15 +309,16 @@ bool process_video_file(const string s1, const string s2, options opt)
 
         if(first)
         {
-            f = cvCreateImage(cvSize(t->width, t->height),IPL_DEPTH_8U, 1);
-            u = cvCreateImage(cvSize(t->width, t->height),IPL_DEPTH_8U, 1);
+            f = cvCreateImage(cvGetSize(t),IPL_DEPTH_8U, 1);
+            u = cvCreateImage(cvGetSize(t),IPL_DEPTH_8U, 1);
+            o = cvCreateImage(cvGetSize(t),IPL_DEPTH_8U, 1);
 
             if(save)
             {
-                p = cvCreateImage(cvSize(t->width, t->height),IPL_DEPTH_8U, 3);
-                int fps     = (int)cvGetCaptureProperty(capture, CV_CAP_PROP_FPS),
-                    frameH  = (int)cvGetCaptureProperty(capture, CV_CAP_PROP_FRAME_HEIGHT),
-                    frameW  = (int)cvGetCaptureProperty(capture, CV_CAP_PROP_FRAME_WIDTH);
+                p = cvCreateImage(cvGetSize(t),IPL_DEPTH_8U, 3);
+                int fps    = (int)cvGetCaptureProperty(capture, CV_CAP_PROP_FPS),
+                    frameH = (int)cvGetCaptureProperty(capture, CV_CAP_PROP_FRAME_HEIGHT),
+                    frameW = (int)cvGetCaptureProperty(capture, CV_CAP_PROP_FRAME_WIDTH);
 
                 // Certain formats do not support slower frame rates
                 // Ex: MPEG1/2 does not support 15/1 fps
@@ -328,12 +332,15 @@ bool process_video_file(const string s1, const string s2, options opt)
         }
 
         cvConvertImage(t, f, 0);
+        cvCopy(f, o);
+
         process_image(f, u, opt);
 
         cvWaitKey(20);
         if(save)
         {
-            printf("PSNR: %f\n", psnr(f, u));
+            printf("Original PSNR: %f\n", psnr(o, f));
+            printf("Modified PSNR: %f\n", psnr(o, u));
 
             // cvWriteFrame wants a 3 channel array even
             // though the values are grayscale.
@@ -342,9 +349,11 @@ bool process_video_file(const string s1, const string s2, options opt)
         }
         else
         {
-            overlay_psnr(f, u);
-            cvShowImage(WIN_MODIFIED, u);
+            overlay_psnr(o, f);
             cvShowImage(WIN_ORIGINAL, f);
+
+            overlay_psnr(o, u);
+            cvShowImage(WIN_MODIFIED, u);
         }
     }
 
